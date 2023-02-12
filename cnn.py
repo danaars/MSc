@@ -28,6 +28,7 @@ class FlowClassify(nn.Module):
         # Define Conv layers and pooling
         self.conv1 = nn.Conv2d(1, 8, 16, device=self.device)    # 1 ch in, 8 filter out 16x16
         self.conv2 = nn.Conv2d(8, 16, 8, device=self.device)    # 8 ch in, 16, filters out, 8x8
+        self.conv3 = nn.Conv2d(16, 32, 5, device=self.device)
         self.pool = nn.MaxPool2d(2, 2)        # 2x2, stride 2
 
         self.flattenlength = self._getflatlen()
@@ -51,6 +52,7 @@ class FlowClassify(nn.Module):
         act = F.relu
         x = self.pool(act(self.conv1(tens)))
         x = self.pool(act(self.conv2(x)))
+        x = self.pool(act(self.conv3(x)))
         return x
 
     def _classify(self, tens):
