@@ -20,8 +20,8 @@ class Pipesound(Dataset):
         if width_cut:
             self.wc = width_cut
             self.data_table = self.data_table[self.data_table["width"] <= width_cut]
-            self.data_table = pd.concat([self.data_table[self.data_table["slug_label"]==1].head(5), 
-                                         self.data_table[self.data_table["slug_label"]==0].head(5)])
+            #self.data_table = pd.concat([self.data_table[self.data_table["slug_label"]==1].head(5), 
+                                         #self.data_table[self.data_table["slug_label"]==0].head(5)])
 
         self.max_w = self.data_table["width"].max()
         self.max_h = self.data_table["height"].max()
@@ -43,9 +43,10 @@ class Pipesound(Dataset):
         #print("Filename: ", filename)
         file_pth = os.path.join(self.data_dir, filename)
         #tens = torch.from_numpy(np.loadtxt(file_pth)).double()
-        tens = torch.from_numpy(np.loadtxt(file_pth))
+        tens = torch.from_numpy(np.loadtxt(file_pth)).unsqueeze(0)
         label_idx = int(df['slug_label'])
-        label = torch.zeros(2)
+        #label = torch.zeros(2)
+        label = torch.zeros(2, dtype = torch.long)     # Thx ChatGPT
         label[label_idx] = 1
         #print("Label = ", label)
 
@@ -63,11 +64,12 @@ class Pipesound(Dataset):
             p = (lft_pad, rgt_pad, top_pad, btm_pad)
             #tens = self.transform(tens, p).double()
             tens = self.transform(tens, p)
+            #tens = tens/tens.max()
 
         if self.label_transform:
             label = self.label_transform(label, dtype = torch.float64)
 
-        return tens, label
+        return tens, label_idx
     
     def __len__(self):
         return len(self.data_table)
@@ -90,20 +92,28 @@ class Soundalyzer(nn.Module):
         self.conv1 = nn.Conv2d(channels, 8, 5)     # 3 channels in, 8 filters applied pr. channel, 5x5 size pr. filter
         # out: 3x8
         self.conv2 = nn.Conv2d(8, 16, 3)
+        #self.conv2 = nn.Conv2d(8, 24, 3)
         # out: 3x8x16
         self.pool = nn.MaxPool2d(2)           # Maxpool over 2x2 squares
 
-        x = self.pool(F.relu(self.conv1(sample_input)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = torch.flatten(x)
+        with torch.no_grad():
+            print("Shape sample input: ", sample_input.shape)
+            x = self.pool(F.relu(self.conv1(sample_input)))
+            print("Shape first conv: ", x.shape)
+            x = self.pool(F.relu(self.conv2(x)))
+            print("Shape second conv: ", x.shape)
+            x = torch.flatten(x, start_dim=1)
         
+        print("Shape flatten(dim): ", x.shape)
         flatten_len = len(x)
+        #print("Length before dense layer: ", flatten_len)
 
         # Classification layers
         #self.classify1 = nn.Linear(127200, 64)
         self.classify1 = nn.Linear(flatten_len, 64)
         self.classify2 = nn.Linear(64, 64)
-        self.classify3 = nn.Linear(64, 2)
+        self.classify3 = nn.Linear(64, 2)       # binary classify
+        #self.classify3 = nn.Linear(64, 10)     # mnist
 
         # Velocity regression layers
         #self.vel1 = nn.Linear(542880, 5)
@@ -126,15 +136,17 @@ class Soundalyzer(nn.Module):
         x = self.pool(F.relu(self.conv2(x)))
         #print(x.shape)
         #print(x)
-        x = torch.flatten(x)
+        x = torch.flatten(x, start_dim=1)
         #print(x.shape)
         #print(x)
         
         """ Network for image classification """
         pred_class = F.relu(self.classify1(x))
+        #pred_class = torch.sigmoid(self.classify1(x))
         #print(pred_class.shape)
         #print(pred_class)
         pred_class = F.relu(self.classify2(pred_class))
+        #pred_class = torch.sigmoid(self.classify2(pred_class))
         #print(pred_class.shape)
         #print(pred_class)
 
@@ -198,55 +210,43 @@ class Soundalyzer(nn.Module):
             print(f"Epoch {nr + 1}/{epochs}")
             epoch_loss = 0
             t0 = time.time()
-            #before_params = self.parameters()
-            #before_params2 = self.parameters()
-            #print("Before == before: ", before_params == before_params2)
+
+            temp_loss = 0
+
             for i, data in enumerate(dataloader):
                 tens, label = data
-                #epoch_loss = 0
-                #print(tens, label)
-                #print(label.item())
-                print("Input shape: ", tens.shape)
 
                 # Set param-space gradient to zero
                 optim.zero_grad()
 
                 # Get model output
-                #print("into self")
-                #print("Inserting tens data into model")
                 out = self(tens)
-                print("Pred: ", out)
-                #print(type(out))
-                print(out.shape)
-                print("Target: ", label[0])
-                #print(type(label[0]))
-                print(label[0].shape)
-                #print("self call successful")
+
+                print("Pred: ", out[0])
+                print("Label: ", label)
+
                 # Calculate loss
-                #print("into loss")
-                l = self.loss(out, label[0])
-                #print(out)
-                #print(label)
-                #print(l)
-                #print("")
-                #print("loss: ", l.item())
+                l = self.loss(out, label)
+
+                # Backpropagation
                 l.backward()
+
+                # Store loss info
                 epoch_loss += l.item()
-                #print("loss call successful")
-                # Perform backpropagation
-                #l.backward()
-                #print("backprop successful")
+                temp_loss += l.item()
+
                 # Step in param space
                 optim.step()
-                #print("optim successful")
+
+                # Get Avg. loss for the last 100 iterations
+                if i%100 == 0:
+                    print(f"[{i}/{len(dataset)}]\tAvg. loss: {temp_loss/100}")
+                    temp_loss=0
 
             t1 = time.time()
             print("Epoch time: ", t1-t0)
             self.loss_epoch.append(epoch_loss/len(dataset))
             print("last avg. loss: ", self.loss_epoch[-1])
-            #after_params = self.parameters()
-            #print("Equal parameters: ", before_params == after_params)
-
             
             with torch.no_grad():
                 m = nn.Sigmoid()
@@ -260,8 +260,8 @@ class Soundalyzer(nn.Module):
                     predind = pred.argmax().item()
                     labelind = label[0].argmax().item()
 
-                    print(f"PRED: {pred}\tIND: {predind}")
-                    print(f"LABEL: {label[0]}\tIND: {labelind}")
+                    #print(f"PRED: {pred}\tIND: {predind}")
+                    #print(f"LABEL: {label[0]}\tIND: {labelind}")
                     if predind == labelind:
                         hit += 1
                 acc = hit/len(dataset)
