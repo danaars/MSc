@@ -1,5 +1,6 @@
 #import lvm_read
 import os
+import cv2
 import numpy as np
 import pandas as pd
 
@@ -156,6 +157,41 @@ def splitnoise(noisedata, indlist):
         '''
     return segments, splitpoints
 
+def verticalsnapshots(pth, mp4file, start_s, stop_s, measureinds):
+    start_ms = int(start_s*1000)
+    stop_ms = int(stop_s*1000)
+
+    filename = os.path.join(pth, mp4file)
+    cap = cv2.VideoCapture(filename)
+
+    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    s = stop_s - start_s
+
+    #print(f"fps: {fps}, w: {fps*s}")
+    if not isinstance(measureinds, list):
+        measureinds = list(measureinds)
+    
+    arr = np.zeros((len(measureinds), h, int(np.ceil(fps*s)+2)))
+
+    ret = True
+    while ret and cap.get(cv2.CAP_PROP_POS_MSEC) < start_ms:
+        #print(f"Time [ms]: {cap.get(cv2.CAP_PROP_POS_MSEC)}")
+        ret, img = cap.read()
+
+    i = 0
+    while ret and cap.get(cv2.CAP_PROP_POS_MSEC) <= stop_ms:
+        #print(f"Time [ms]: {cap.get(cv2.CAP_PROP_POS_MSEC)}")
+        ret, BGRimg = cap.read()
+        grayimg = cv2.cvtColor(BGRimg, cv2.COLOR_BGR2GRAY)
+        for nr in range(len(measureinds)):
+            arr[nr, :, i] = grayimg[:, measureinds[nr]]
+        #print(f"{grayimg[:, 1700].shape}")
+        #print(f"gray.shape: {grayimg.shape}\tgray.type: {type(grayimg)}")
+        i += 1
+
+    cap.release()
+    return arr
 
 if __name__ == "__main__":
     import numpy as np
