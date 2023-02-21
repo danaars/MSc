@@ -2,7 +2,7 @@
 import os
 import cv2
 import matplotlib
-matplotlib.use('tkagg')
+matplotlib.use('tkagg')     # Matplotlib has issues with cv2
 import numpy as np
 import pandas as pd
 
