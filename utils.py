@@ -74,7 +74,7 @@ def slugstartinds(data, cutoff, timedelay):
     """
     inds = np.where(data > cutoff)[0]
 
-    sluginds = []
+    sluginds = [inds[0]]
 
     for i in range(len(inds)-1):
         if np.abs(inds[i] - inds[i+1]) > timedelay:
