@@ -1,6 +1,8 @@
 #import lvm_read
 import os
 import cv2
+import matplotlib
+matplotlib.use('tkagg')
 import numpy as np
 import pandas as pd
 
