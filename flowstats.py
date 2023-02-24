@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 from utils import *
 
-nr = 59
+nr = 60
 datapath = "/run/media/daniel/ATLEJ-STT/data"
 fil = f"micData_{nr}.lvm"
 mp4path = "/run/media/daniel/ATLEJ-STT/mp4"
@@ -43,13 +43,18 @@ wsf_k = (wsf - wsf.mean())/len(wsf)
 wst_k = (wst - wst.mean())/len(wst)
 aes_k = (aes - aes.mean())/len(aes)
 
+if not os.path.exists(f"{nr}stats"):
+    os.makedirs(f"{nr}stats")
+
 print(f"Number of slugs: {len(coupledidx)}")
-for startind, stopind in coupledidx:
+for slugnr, pair in enumerate(coupledidx):
+    startind, stopind = pair
     start_t = startind/8000
     stop_t = stopind/8000
 
     #slices = [i for i in range(60, 1850, 5)]
-    cap = verticalsnapshots(mp4path, mp4, start_t, stop_t, [60, 1850])
+    slices = [60, 1850]
+    cap = verticalsnapshots(mp4path, mp4, start_t, stop_t, slices)
 
     normcap = []
     for arr in cap:
@@ -69,7 +74,7 @@ for startind, stopind in coupledidx:
 
     index = np.arange(len(first_intensity))
     
-    fig, ax = plt.subplots(2)
+    fig, ax = plt.subplots(2, 2)
     
     a = first_intensity[:-5]
     b = final_intensity[:-5]
@@ -78,24 +83,73 @@ for startind, stopind in coupledidx:
     #ax[0, 1].imshow(first)
     #ax[1, 1].imshow(final)
 
-    ax[0].plot(x, a, label = "vid_idx: 60", c="C0")#, alpha = 0.2)
-    ax[0].plot(x, b, label = "vid_idx: 1850", c="C1")#, alpha = 0.2)
+    ax[0,0].plot(x, a, label = "vid_idx: 60", c="C0")#, alpha = 0.2)
+    ax[0,0].plot(x, b, label = "vid_idx: 1850", c="C1")#, alpha = 0.2)
     #ax[0].axhline(3*np.std(a), c="C0", ls="--", alpha=0.3)
     #ax[0].axhline(3*np.std(b), c="C1", ls="--", alpha=0.3)
-    ax[0].legend()
+    ax[0,0].legend()
 
     arunavg = np.convolve(a, runavg, mode="same")
     brunavg = np.convolve(b, runavg, mode="same")
-    ax[1].plot(x, arunavg, label = "vid_idx: 60", c="C0")
-    ax[1].plot(x, brunavg, label = "vid_idx: 1850", c="C1")
-    ax[1].legend()
-    ax[1].set_title("Average")
-    ax[1].axhline(np.std(arunavg), ls="--", c="k", alpha=0.3)
-    ax[1].axhline(-np.std(arunavg), ls="--", c="k", alpha=0.3)
-    ax[1].axhline(np.std(brunavg), ls="--", c="k", alpha=0.3)
-    ax[1].axhline(-np.std(brunavg), ls="--", c="k", alpha=0.3)
-    ax[1].fill_between(x, np.std(arunavg), -np.std(arunavg), color="C0", alpha =0.2)
-    ax[1].fill_between(x, np.std(brunavg), -np.std(brunavg), color="C1", alpha =0.2)
+
+    afullpipe = np.where(arunavg < -np.std(arunavg))
+    bfullpipe = np.where(brunavg < -np.std(brunavg))
+    #print(f"afullpipe: {afullpipe}\t bool: {bool(afullpipe)}")
+    #print(f"bfullpipe: {bfullpipe}\t bool: {bool(bfullpipe)}")
+    if afullpipe:
+        #print("Full slug")
+        apeak = arunavg[:afullpipe[0][0]].argmax()
+        ax[1,0].scatter(x[apeak], arunavg[apeak], c="green", marker="x")
+        ax[1,0].scatter(x[afullpipe], arunavg[afullpipe], c="red", alpha=0.4)
+        ax[0,1].axvline(afullpipe[0][-1]+1, c='r', ls='--', alpha=0.4)
+        ax[0,0].scatter(x[apeak], a[apeak], c="green", marker="x", zorder=5)
+        alastind = afullpipe[0][-1]+1
+        ax[0,0].scatter(x[alastind], a[alastind], c="r", zorder=5)
+        asluglen = alastind - apeak
+        ax[0,1].set_title(f"Slug length (time) : {asluglen}")
+    else:
+        #print("Aerated slug")
+        apeak = arunavg.argmax()
+        ax[1,0].scatter(x[apeak], arunavg[apeak], c="green", marker="x")
+
+    if bfullpipe:
+        #print("Full slug")
+        bpeak = brunavg[:bfullpipe[0][0]].argmax()
+        ax[1,0].scatter(x[bpeak], brunavg[bpeak], c="green", marker="x")
+        ax[1,0].scatter(x[bfullpipe], brunavg[bfullpipe], c="red", alpha=0.4)
+        ax[1,1].axvline(bfullpipe[0][-1]+1, c='r', ls='--', alpha=0.4)
+        ax[0,0].scatter(x[bpeak], b[bpeak], c="green", marker="x")
+        blastind = bfullpipe[0][-1]+1
+        ax[0,0].scatter(x[blastind], b[blastind], c="r", zorder=5)
+        bsluglen = blastind - bpeak
+        ax[1,1].set_title(f"Slug length (time) : {bsluglen}")
+
+        xdiff = bpeak - apeak
+        sekdiff = xdiff*1/30
+        pixeldiff = slices[-1]-slices[0]
+        slugvel = pixeldiff/sekdiff
+        fig.suptitle(f"Slug velocity: {slugvel} pixels/s")
+
+    else:
+        #print("Aerated slug")
+        bpeak = brunavg.argmax()
+        ax[1,0].scatter(x[bpeak], brunavg[bpeak], c="green", marker="x")
+
+    ax[1,0].plot(x, arunavg, label = "vid_idx: 60", c="C0")
+    ax[1,0].plot(x, brunavg, label = "vid_idx: 1850", c="C1")
+    ax[1,0].legend()
+    ax[1,0].set_title("Average")
+    ax[1,0].axhline(-np.std(arunavg), ls="--", c="C0", alpha=0.3)
+    #ax[1].axhline(-np.std(arunavg), ls="--", c="k", alpha=0.3)
+    ax[1,0].axhline(-np.std(brunavg), ls="--", c="C1", alpha=0.3)
+    #ax[1].axhline(-np.std(brunavg), ls="--", c="k", alpha=0.3)
+    #ax[1].fill_between(x, np.std(arunavg), -np.std(arunavg), color="C0", alpha =0.2)
+    #ax[1].fill_between(x, np.std(brunavg), -np.std(brunavg), color="C1", alpha =0.2)
+    ax[0,1].imshow(first)
+    ax[0,1].axvline(apeak, c='k', ls='--', alpha=0.4)
+
+    ax[1,1].imshow(final)
+    ax[1,1].axvline(bpeak, c='k', ls='--', alpha=0.4)
 
 
     '''
@@ -161,7 +215,8 @@ for startind, stopind in coupledidx:
     ax[1, 1].set_xlabel("Frame")
     """
 
-    fig.set_size_inches(16, 12)
+    fig.set_size_inches(12, 8)
 
-    plt.show()
+    plt.savefig(f"{nr}stats/slug{slugnr}.png")
+    plt.close()
     #exit(1)
