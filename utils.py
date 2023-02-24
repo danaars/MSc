@@ -20,7 +20,8 @@ def extract_lvm(pth, file, get_sr = False, sep="\t", skiprows=22, dropcol="Comme
     - Returns --
     t (ndarray) : timestamp for samples
     x (ndarray) : measured values
-    sample_rate (int) : sample rate of data extracted
+    #TODO:
+    #sample_rate (int) : sample rate of data extracted
     """
  
     fullfile = os.path.join(pth, file)

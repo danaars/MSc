@@ -9,6 +9,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("Using device: ", device)
 
 abspath = "/itf-fi-ml/shared/users/daniejaa/test"   #/itf-fi-ml/shared/users/daniejaa/test
+#abspath = "/run/media/daniel/ATLEJ-STT/data/test"   #/itf-fi-ml/shared/users/daniejaa/test
 ds = Pipesound("meta.csv", abspath, transform = "pad", width_cut = 700)
 
 l = len(ds)
@@ -19,8 +20,8 @@ train, test = random_split(ds, [trainsize, testsize])
 print(f"Length train set: {len(train)}")
 print(f"Length test set: {len(test)}")
 
-trainloader = DataLoader(train, batch_size=1, shuffle=True, num_workers=12)
-testloader = DataLoader(test, batch_size=1, shuffle=True, num_workers=12)
+trainloader = DataLoader(train, batch_size=5, shuffle=True, num_workers=2)
+testloader = DataLoader(test, batch_size=5, shuffle=True, num_workers=2)
 
 sample = torch.rand([1, ds.max_h, ds.max_w], device = device)
 model = FlowClassify(sample_input = sample,
@@ -46,8 +47,14 @@ for e in range(epochs):
         tens = tens.to(device)
         label = label.to(device)
 
+        #print(f"Input tensor shape: {tens.shape}")
+        #print(f"Input label shape: {label.shape}")
+
         # Prediction
         pred = model(tens)
+
+        #print(f"Output tensor shape: {pred.shape}")
+        #print(f"Label:\t{label}\nPrediction:\t{pred}")
 
         # Calculate loss
         loss = criterion(pred, label)
@@ -59,7 +66,7 @@ for e in range(epochs):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
+        exit(0)
         if (i+1)%100 == 0:
             print(f"[{i+1}/{len(train)}]\tAvg. loss: {tmp_loss/100}")
             tmp_loss = 0

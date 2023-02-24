@@ -1,6 +1,13 @@
 # Created by https://www.toptal.com/developers/gitignore/api/linux,vim,python,tex,latex
 # Edit at https://www.toptal.com/developers/gitignore?templates=linux,vim,python,tex,latex
 
+### Custom ###
+## Pictures
+*.png
+
+## Audio
+*.wav
+
 ### LaTeX ###
 ## Core latex/pdflatex auxiliary files:
 *.aux
