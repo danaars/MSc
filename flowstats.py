@@ -1,11 +1,12 @@
 import os
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
 from scipy.signal import find_peaks
 from utils import *
 
-nr = 60
+nr = 49
 datapath = "/run/media/daniel/ATLEJ-STT/data"
 fil = f"micData_{nr}.lvm"
 mp4path = "/run/media/daniel/ATLEJ-STT/mp4"
@@ -15,45 +16,29 @@ df = extract_lvm(datapath, fil)
 
 data = df["mic2"].to_numpy()
 
-segments, coupledidx = splitslugs(data, 3*np.std(data), 5*8000,
+segments, coupledidx = splitslugs(data, 
+                                  3*np.std(data), # Threshold for interest
+                                  5*8000,
                                   getsplitpoints=True)
-#print(len(segments))
-#print(len(coupledidx))
 
 t = df["time"].to_numpy()
-'''
-plt.plot(t, data, zorder=1)
-for start, slutt in coupledidx:
-    plt.scatter(t[start], 0, c='green')
-    plt.scatter(t[slutt], 0, c='red')
-plt.show()
-'''
 
 kl = 5
 runavg = np.ones(kl)/kl
-#wsf = np.array([0, 0, 0, 1, 2, 3, 3, 3, 1.5, -2, -2, -2])           # Water slug front
-#wst = np.array([-2, -2, -2, 1.5, 3, 3, 3, 2, 1, 0, 0, 0])           # Water slug tail
-#aes = np.array([0, 0, 0, 3, 5, 5, 5, 3, 2, 0, 0, 0])                # Aerated slug
+#if not os.path.exists(f"{nr}stats"):
+    #os.makedirs(f"{nr}stats")
 
-wsf = np.array([0, 0, 0, 0, 0, 0, 0, 10])
-wst = np.array([10, 0, 0, 0, 0, 0, 0, 0])
-aes = np.array([0, 0, 0, 1, 1, 1, 0, 0, 0])
-
-wsf_k = (wsf - wsf.mean())/len(wsf)
-wst_k = (wst - wst.mean())/len(wst)
-aes_k = (aes - aes.mean())/len(aes)
-
-if not os.path.exists(f"{nr}stats"):
-    os.makedirs(f"{nr}stats")
-
+slugstats = []
+slices = [i for i in range(60, 1850, 90)]
+#slices = [60, 1850]
+slices.remove(1050)     # zip tie pixel
 print(f"Number of slugs: {len(coupledidx)}")
 for slugnr, pair in enumerate(coupledidx):
+    print(f"Treating slug {slugnr+1}/{len(coupledidx)}")
     startind, stopind = pair
     start_t = startind/8000
     stop_t = stopind/8000
 
-    #slices = [i for i in range(60, 1850, 5)]
-    slices = [60, 1850]
     cap = verticalsnapshots(mp4path, mp4, start_t, stop_t, slices)
 
     normcap = []
@@ -61,14 +46,52 @@ for slugnr, pair in enumerate(coupledidx):
         #print(arr.shape)
         normcap.append(arr - arr.mean(axis=1, keepdims=True))
 
-    first = normcap[0]
-    final = normcap[-1]
     normintcap = []
     for arr in normcap:
         normintcap.append(arr.mean(axis=0))
 
     fullcap = np.array(normintcap)
 
+    for i, arr in enumerate(fullcap):
+        #print(f"[{i+1}/{len(slices)}]")
+        conv = np.convolve(arr, runavg, mode="same")
+        d = {
+            "run":              nr,
+            "slugnr":           slugnr+1,
+            "startind":         startind,
+            "endind":           stopind,
+            "length":           int(stopind - startind),
+            "starttime":        start_t,
+            "endtime":          stop_t,
+            "timelen":          stop_t - start_t,
+            "measurepixel":     slices[i],
+            "avg":              np.mean(arr),
+            "var":              np.var(arr),
+            "std":              np.std(arr),
+            "min":              np.min(arr),
+            "max":              np.max(arr),
+            "minidx":           np.argmin(arr),
+            "maxidx":           np.argmax(arr),
+            "minidxtime":       np.argmin(arr)/8000,
+            "maxidxtime":       np.argmax(arr)/8000,
+            "convavg":          np.mean(conv),
+            "convvar":          np.var(conv),
+            "convstd":          np.std(conv),
+            "convmin":          np.min(conv),
+            "convmax":          np.max(conv),
+            "convminidx":       np.argmin(conv),
+            "convmaxidx":       np.argmax(conv),
+            "convminidxtime":   np.argmin(conv)/8000,
+            "convmaxidxtime":   np.argmax(conv)/8000
+            } 
+
+        slugstats.append(d)
+
+df = pd.DataFrame(slugstats)
+df.to_csv(f"run{nr}stats.csv")
+exit(1)
+'''
+    exit(1) # Remove for visualization, crashes tentativly
     first_intensity = fullcap[0]
     final_intensity = fullcap[-1]
 
@@ -92,18 +115,20 @@ for slugnr, pair in enumerate(coupledidx):
     arunavg = np.convolve(a, runavg, mode="same")
     brunavg = np.convolve(b, runavg, mode="same")
 
-    afullpipe = np.where(arunavg < -np.std(arunavg))
-    bfullpipe = np.where(brunavg < -np.std(brunavg))
+    afullpipe = np.where(arunavg < -np.std(arunavg))[0]
+    bfullpipe = np.where(brunavg < -np.std(brunavg))[0]
     #print(f"afullpipe: {afullpipe}\t bool: {bool(afullpipe)}")
     #print(f"bfullpipe: {bfullpipe}\t bool: {bool(bfullpipe)}")
-    if afullpipe:
+    at = 1  # Aerated tightness threshold for number of standard deviations threshold
+    if afullpipe.size > 0:
         #print("Full slug")
-        apeak = arunavg[:afullpipe[0][0]].argmax()
+        apeak = arunavg[:afullpipe[0]].argmax()
         ax[1,0].scatter(x[apeak], arunavg[apeak], c="green", marker="x")
         ax[1,0].scatter(x[afullpipe], arunavg[afullpipe], c="red", alpha=0.4)
-        ax[0,1].axvline(afullpipe[0][-1]+1, c='r', ls='--', alpha=0.4)
+        ax[0,1].axvline(afullpipe[-1]+1, c='r', ls='--', alpha=0.4)
+        ax[0,1].axvline(apeak, c='k', ls='--', alpha=0.4)
         ax[0,0].scatter(x[apeak], a[apeak], c="green", marker="x", zorder=5)
-        alastind = afullpipe[0][-1]+1
+        alastind = afullpipe[-1]+1
         ax[0,0].scatter(x[alastind], a[alastind], c="r", zorder=5)
         asluglen = alastind - apeak
         ax[0,1].set_title(f"Slug length (time) : {asluglen}")
@@ -111,15 +136,26 @@ for slugnr, pair in enumerate(coupledidx):
         #print("Aerated slug")
         apeak = arunavg.argmax()
         ax[1,0].scatter(x[apeak], arunavg[apeak], c="green", marker="x")
+        bef_ap = arunavg[:apeak]
+        aft_ap = arunavg[apeak:]
+        aslug_start = np.where(bef_ap < at*np.std(arunavg))[0][-1]
+        aslug_end = np.where(aft_ap < at*np.std(arunavg))[0][0]+apeak
+        ax[1,0].scatter(x[aslug_start], arunavg[aslug_start], c='k')
+        ax[1,0].scatter(x[aslug_end], arunavg[aslug_end], c='r')
+        ax[0,1].axvline(aslug_start, c='k', ls='--', alpha=0.4)
+        ax[0,1].axvline(aslug_end, c='r', ls='--', alpha=0.4)
+        
+        
 
-    if bfullpipe:
+    if bfullpipe.size > 0:
         #print("Full slug")
-        bpeak = brunavg[:bfullpipe[0][0]].argmax()
+        bpeak = brunavg[:bfullpipe[0]].argmax()
         ax[1,0].scatter(x[bpeak], brunavg[bpeak], c="green", marker="x")
         ax[1,0].scatter(x[bfullpipe], brunavg[bfullpipe], c="red", alpha=0.4)
-        ax[1,1].axvline(bfullpipe[0][-1]+1, c='r', ls='--', alpha=0.4)
+        ax[1,1].axvline(bfullpipe[-1]+1, c='r', ls='--', alpha=0.4)
+        ax[1,1].axvline(bpeak, c='k', ls='--', alpha=0.4)
         ax[0,0].scatter(x[bpeak], b[bpeak], c="green", marker="x")
-        blastind = bfullpipe[0][-1]+1
+        blastind = bfullpipe[-1]+1
         ax[0,0].scatter(x[blastind], b[blastind], c="r", zorder=5)
         bsluglen = blastind - bpeak
         ax[1,1].set_title(f"Slug length (time) : {bsluglen}")
@@ -134,25 +170,31 @@ for slugnr, pair in enumerate(coupledidx):
         #print("Aerated slug")
         bpeak = brunavg.argmax()
         ax[1,0].scatter(x[bpeak], brunavg[bpeak], c="green", marker="x")
+        bef_bp = brunavg[:bpeak]
+        aft_bp = brunavg[bpeak:]
+        bslug_start = np.where(bef_bp < at*np.std(brunavg))[0][-1]
+        bslug_end = np.where(aft_bp < at*np.std(brunavg))[0][0]+bpeak
+        ax[1,0].scatter(x[bslug_start], brunavg[bslug_start], c='k')
+        ax[1,0].scatter(x[bslug_end], brunavg[bslug_end], c='r')
+        ax[1,1].axvline(bslug_start, c='k', ls='--', alpha=0.4)
+        ax[1,1].axvline(bslug_end, c='r', ls='--', alpha=0.4)
 
     ax[1,0].plot(x, arunavg, label = "vid_idx: 60", c="C0")
     ax[1,0].plot(x, brunavg, label = "vid_idx: 1850", c="C1")
     ax[1,0].legend()
     ax[1,0].set_title("Average")
-    ax[1,0].axhline(-np.std(arunavg), ls="--", c="C0", alpha=0.3)
-    #ax[1].axhline(-np.std(arunavg), ls="--", c="k", alpha=0.3)
-    ax[1,0].axhline(-np.std(brunavg), ls="--", c="C1", alpha=0.3)
-    #ax[1].axhline(-np.std(brunavg), ls="--", c="k", alpha=0.3)
-    #ax[1].fill_between(x, np.std(arunavg), -np.std(arunavg), color="C0", alpha =0.2)
-    #ax[1].fill_between(x, np.std(brunavg), -np.std(brunavg), color="C1", alpha =0.2)
+    #ax[1,0].axhline(np.std(arunavg), ls="--", c="C0", alpha=0.3)
+    #ax[1,0].axhline(-np.std(arunavg), ls="--", c="C0", alpha=0.3)
+    #ax[1,0].axhline(np.std(brunavg), ls="--", c="C1", alpha=0.3)
+    #ax[1,0].axhline(-np.std(brunavg), ls="--", c="C1", alpha=0.3)
+    ax[1,0].fill_between(x, 0.5*np.std(arunavg), at*-np.std(arunavg), color="C0", alpha =0.2)
+    ax[1,0].fill_between(x, 0.5*np.std(brunavg), at*-np.std(brunavg), color="C1", alpha =0.2)
+
     ax[0,1].imshow(first)
-    ax[0,1].axvline(apeak, c='k', ls='--', alpha=0.4)
-
     ax[1,1].imshow(final)
-    ax[1,1].axvline(bpeak, c='k', ls='--', alpha=0.4)
+'''
 
-
-    '''
+'''
     awsf = np.convolve(a, wsf_k, mode="same")
     bwsf = np.convolve(b, wsf_k, mode="same")
     ax[1, 0].plot(x, awsf, label="vid_idx: 60", c="C0")
@@ -173,8 +215,8 @@ for slugnr, pair in enumerate(coupledidx):
     ax[1, 2].plot(x, baes, label="vid_idx: 1850", c="C1")
     ax[1, 2].legend()
     ax[1, 2].set_title("Aerated slug")
-    '''
-    ''' 
+'''
+''' 
     cutoff = 1
     sek_diff = 0.6
     apeak, _aval = find_peaks(aa, height = cutoff*np.std(aa), distance = 30*sek_diff)
@@ -203,8 +245,8 @@ for slugnr, pair in enumerate(coupledidx):
     ax[1].plot(x, dbb, c="C1")
     ax[1].axhline(3*np.std(daa), c="C0", ls="--", alpha=0.3)
     ax[1].axhline(3*np.std(dbb), c="C1", ls="--", alpha=0.3)
-    '''
-    """
+'''
+"""
     ax[0, 0].set_title("Vertical intensity from mp4")
     ax[0, 0].set_xlabel("Frame")
     ax[1, 0].set_title("1D convolution of vertical intensity")
@@ -213,10 +255,13 @@ for slugnr, pair in enumerate(coupledidx):
     ax[0, 1].set_xlabel("Frame")
     ax[1, 1].set_title("Vertical snapshot from pixelcolumn 1850")
     ax[1, 1].set_xlabel("Frame")
-    """
+"""
 
+'''
     fig.set_size_inches(12, 8)
 
+    #plt.show()
     plt.savefig(f"{nr}stats/slug{slugnr}.png")
     plt.close()
     #exit(1)
+'''
