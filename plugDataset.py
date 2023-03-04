@@ -144,7 +144,6 @@ for nr in [59, 60]:
                 "starttime":    start_t,
                 "endtime":      end_t
                 }
-        print(d)
         allslugs.append(d)
 
 df = pd.DataFrame(allslugs)

@@ -177,6 +177,9 @@ def verticalsnapshots(pth, mp4file, start_s, stop_s, measureinds):
     
     arr = np.zeros((len(measureinds), h, int(np.ceil(fps*s)+2)))
 
+    # Set start close to start sec, potential massive speedup
+    cap.set(cv2.CAP_PROP_POS_MSEC, int(start_ms - 100))
+
     ret = True
     while ret and cap.get(cv2.CAP_PROP_POS_MSEC) < start_ms:
         #print(f"Time [ms]: {cap.get(cv2.CAP_PROP_POS_MSEC)}")
@@ -195,120 +198,3 @@ def verticalsnapshots(pth, mp4file, start_s, stop_s, measureinds):
 
     cap.release()
     return arr
-
-if __name__ == "__main__":
-    import numpy as np
-    import glob
-    import matplotlib.pyplot as plt
-    import re
-    import torch
-    import sys
-    
-    if sys.argv[1] == "save":
-        pth = "0811"
-        files = glob.glob(os.path.join(pth, "micData_*.lvm"))
-        #files = glob.glob(pth, "micData_*.lvm")
-        #files = os.listdir("0811")
-        files.sort()
-
-        outdir = "0811_spectro_scaled"
-        halfmin = int(30*8000)
-        if not os.path.exists(outdir):
-            os.mkdir(outdir)
-
-        shapes = []
-        for file in files:
-            pth, file = os.path.split(file)
-            t, data = extract_lvm(pth, file)
-
-            tens = []
-            for i in range(len(data)):
-                print(len(data[i][:halfmin]))
-                freq, time, vals = transform(data[i][:halfmin], sample_rate=8000)
-                tens.append(vals)
-
-            tens = np.asarray(tens)
-            tens = torch.from_numpy(tens)
-            shapes.append(tens.shape)
-
-            nr = re.search(r"(\d+)", file).group(1)
-            filename = f"spec{nr}.pt"       # .pt for pytorch tensor extention
-
-            #np.savetxt(os.path.join(outdir, filename), tens)
-            torch.save(tens, os.path.join(outdir, filename))
-
-    else:
-        pth = "0811_spectro_scaled"
-        for i in range(28, 46):
-            filename = f"spec{i}.pt"
-
-            out = torch.load(os.path.join(pth, filename))
-            print(out.shape)
-
-
-        '''
-        pth = "../18.10/Labdata/"
-        file = "micData_25.lvm"
-        file2 = "micData_26.lvm"
-
-        t, x, sr = extract_lvm(pth, file, True)
-        t2, x2, sr = extract_lvm(pth, file2, True)
-
-        plt.plot(t, x)
-        plt.title("Slug 'lyd'")
-        plt.xlabel("Tid")
-        plt.ylabel("Spenning (Volt)")
-        plt.savefig("18_10_slug_lyd.png")
-        plt.show()
-
-
-        plt.plot(t2, x2)
-        plt.title("Ingen slug 'lyd'")
-        plt.xlabel("Tid")
-        plt.ylabel("Spenning (Volt)")
-        plt.savefig("18_10_noslug_lyd.png")
-        plt.show()
-
-        n = int(0.2 * len(x))
-        section = x[:n]
-
-        f, t, spec = transform(section)
-
-        plt.pcolormesh(t, f, spec)
-        plt.title("Spectrogram (første 20% av 5 min)")
-        plt.xlabel("Tid")
-        plt.ylabel("Frekvens (?)")
-        plt.savefig("18_10_slug_spec.png")
-        plt.show()
-
-        section = x2[:n]
-
-        f2, t2, spec2 = transform(section)
-
-        plt.pcolormesh(t2, f2, spec2)
-        plt.title("Spectrogram (første 20% av 5 min)")
-        plt.xlabel("Tid")
-        plt.ylabel("Frekvens (?)")
-        plt.savefig("18_10_noslug_spec.png")
-        plt.show()
-
-        slug_freq_vals = np.fft.fft(x)
-        slug_freqs = np.fft.fftfreq(len(x))
-
-        plt.scatter(slug_freqs, slug_freq_vals.real, alpha = 0.5, marker = '.', label = "Real")
-        plt.scatter(slug_freqs, slug_freq_vals.imag, alpha = 0.5, marker = '.', label = "Imag")
-        plt.title("FFT av slug lyd")
-        plt.legend()
-        plt.savefig("18_10_slug_FFT.png")
-        plt.show()
-
-        slug_freq_vals2 = np.fft.fft(x2)
-        slug_freqs2 = np.fft.fftfreq(len(x2))
-
-        plt.scatter(slug_freqs2, slug_freq_vals2.real, alpha = 0.5, marker = '.', label = "Real")
-        plt.scatter(slug_freqs2, slug_freq_vals2.imag, alpha = 0.5, marker = '.', label = "Imag")
-        plt.title("FFT av uten slug lyd")
-        plt.savefig("18_10_noslug_FFT.png")
-        plt.legend()
-        plt.show()
-        '''
