@@ -16,6 +16,11 @@ df = extract_lvm(datapath, fil)
 
 data = df["mic2"].to_numpy()
 
+#data = np.loadtxt("data10min.txt")
+#t = np.loadtxt("time10min.txt")
+#data = data[:8000*60*3]
+#t = t[:8000*60*3]
+
 segments, coupledidx = splitslugs(data, 
                                   3*np.std(data), # Threshold for interest
                                   5*8000,
@@ -30,18 +35,21 @@ runavg = np.ones(kl)/kl
 
 slugstats = []
 slices = [i for i in range(60, 1850, 90)]
-#slices = [60, 1850]
 slices.remove(1050)     # zip tie pixel
+#slices = [60, 1850]
+#slices = [60]
 print(f"Number of slugs: {len(coupledidx)}")
 for slugnr, pair in enumerate(coupledidx):
     print(f"Treating slug {slugnr+1}/{len(coupledidx)}")
     startind, stopind = pair
     start_t = startind/8000
     stop_t = stopind/8000
+    print(f"mp4 time: {start_t//60}:{start_t%60} - {stop_t//60}:{stop_t%60}")
 
     cap = verticalsnapshots(mp4path, mp4, start_t, stop_t, slices)
 
     normcap = []
+
     for arr in cap:
         #print(arr.shape)
         normcap.append(arr - arr.mean(axis=1, keepdims=True))
@@ -50,11 +58,19 @@ for slugnr, pair in enumerate(coupledidx):
     for arr in normcap:
         normintcap.append(arr.mean(axis=0))
 
+    first = normcap[0]
+    final = normcap[-1]
+
     fullcap = np.array(normintcap)
 
+    # For storing into csv file
     for i, arr in enumerate(fullcap):
         #print(f"[{i+1}/{len(slices)}]")
+        lowinds = np.where(arr < -np.std(arr))[0]
+        highinds = np.where(arr > np.std(arr))[0]
         conv = np.convolve(arr, runavg, mode="same")
+        convlowinds = np.where(conv < -np.std(conv))[0]
+        convhighinds = np.where(conv > np.std(conv))[0]
         d = {
             "run":              nr,
             "slugnr":           slugnr+1,
@@ -72,6 +88,8 @@ for slugnr, pair in enumerate(coupledidx):
             "max":              np.max(arr),
             "minidx":           np.argmin(arr),
             "maxidx":           np.argmax(arr),
+            "lowinds":          len(lowinds),
+            "highinds":         len(highinds),
             "minidxtime":       np.argmin(arr)/8000,
             "maxidxtime":       np.argmax(arr)/8000,
             "convavg":          np.mean(conv),
@@ -82,16 +100,22 @@ for slugnr, pair in enumerate(coupledidx):
             "convminidx":       np.argmin(conv),
             "convmaxidx":       np.argmax(conv),
             "convminidxtime":   np.argmin(conv)/8000,
-            "convmaxidxtime":   np.argmax(conv)/8000
+            "convmaxidxtime":   np.argmax(conv)/8000,
+            "convlowinds":      len(convlowinds),
+            "convhighinds":     len(convlowinds)
             } 
 
         slugstats.append(d)
 
+# unindent in order to use
 df = pd.DataFrame(slugstats)
 df.to_csv(f"run{nr}stats.csv")
+#continue
+print("CSV file written")
 exit(1)
-'''
-    exit(1) # Remove for visualization, crashes tentativly
+"""
+    allimgs = np.array(normcap)
+    #exit(1) # Remove for visualization, crashes tentativly
     first_intensity = fullcap[0]
     final_intensity = fullcap[-1]
 
@@ -192,9 +216,8 @@ exit(1)
 
     ax[0,1].imshow(first)
     ax[1,1].imshow(final)
-'''
 
-'''
+    '''
     awsf = np.convolve(a, wsf_k, mode="same")
     bwsf = np.convolve(b, wsf_k, mode="same")
     ax[1, 0].plot(x, awsf, label="vid_idx: 60", c="C0")
@@ -215,8 +238,8 @@ exit(1)
     ax[1, 2].plot(x, baes, label="vid_idx: 1850", c="C1")
     ax[1, 2].legend()
     ax[1, 2].set_title("Aerated slug")
-'''
-''' 
+    '''
+    '''
     cutoff = 1
     sek_diff = 0.6
     apeak, _aval = find_peaks(aa, height = cutoff*np.std(aa), distance = 30*sek_diff)
@@ -239,14 +262,16 @@ exit(1)
             print("multiple peaks final")
             break
         ax[1,1].axvline(bp, c="k", ls="--", zorder=5, alpha=0.25)
+    '''
+    '''
     daa = np.gradient(aa)
     dbb = np.gradient(bb)
     ax[1].plot(x, daa, c="C0")
     ax[1].plot(x, dbb, c="C1")
     ax[1].axhline(3*np.std(daa), c="C0", ls="--", alpha=0.3)
     ax[1].axhline(3*np.std(dbb), c="C1", ls="--", alpha=0.3)
-'''
-"""
+    '''
+
     ax[0, 0].set_title("Vertical intensity from mp4")
     ax[0, 0].set_xlabel("Frame")
     ax[1, 0].set_title("1D convolution of vertical intensity")
@@ -255,13 +280,13 @@ exit(1)
     ax[0, 1].set_xlabel("Frame")
     ax[1, 1].set_title("Vertical snapshot from pixelcolumn 1850")
     ax[1, 1].set_xlabel("Frame")
+
+    fig.set_size_inches(12, 8)
+    fig.tight_layout()
+
+    plt.show()
+    #plt.savefig(f"{nr}stats/slug{slugnr}.png")
+    #plt.close()
+    #exit(1)
 """
 
-'''
-    fig.set_size_inches(12, 8)
-
-    #plt.show()
-    plt.savefig(f"{nr}stats/slug{slugnr}.png")
-    plt.close()
-    #exit(1)
-'''
