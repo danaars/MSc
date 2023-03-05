@@ -8,8 +8,8 @@ from torch.utils.data import DataLoader, random_split
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("Using device: ", device)
 
-abspath = "/itf-fi-ml/shared/users/daniejaa/test"   #/itf-fi-ml/shared/users/daniejaa/test
-#abspath = "/run/media/daniel/ATLEJ-STT/data/test"   #/itf-fi-ml/shared/users/daniejaa/test
+#abspath = "/itf-fi-ml/shared/users/daniejaa/test"   #/itf-fi-ml/shared/users/daniejaa/test
+abspath = "/run/media/daniel/ATLEJ-STT/data/test"   #/itf-fi-ml/shared/users/daniejaa/test
 ds = Pipesound("meta.csv", abspath, transform = "pad", width_cut = 700)
 
 l = len(ds)
@@ -20,7 +20,7 @@ train, test = random_split(ds, [trainsize, testsize])
 print(f"Length train set: {len(train)}")
 print(f"Length test set: {len(test)}")
 
-trainloader = DataLoader(train, batch_size=5, shuffle=True, num_workers=2)
+trainloader = DataLoader(train, batch_size=1, shuffle=True, num_workers=2)
 testloader = DataLoader(test, batch_size=5, shuffle=True, num_workers=2)
 
 sample = torch.rand([1, ds.max_h, ds.max_w], device = device)
@@ -55,6 +55,11 @@ for e in range(epochs):
 
         #print(f"Output tensor shape: {pred.shape}")
         #print(f"Label:\t{label}\nPrediction:\t{pred}")
+        print(pred)
+        print(pred.shape)
+        print(label)
+        print(label.shape)
+        exit(1)
 
         # Calculate loss
         loss = criterion(pred, label)

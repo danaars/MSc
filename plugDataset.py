@@ -7,12 +7,13 @@ from sklearn.linear_model import RANSACRegressor
 
 datapath = "/run/media/daniel/ATLEJ-STT/data"
 mp4path = "/run/media/daniel/ATLEJ-STT/mp4"
+saveloc = "/run/media/daniel/ATLEJ-STT/plugslug"
 
 def consec(arr, step):
     return np.split(arr, np.where(np.diff(arr) > step)[0] + 1)
 
 allslugs = []
-
+indicies = []
 for nr in [59, 60]:
     fil = f"micData_{nr}.lvm"
     mp4 = f"run{nr}.mp4"
@@ -29,6 +30,9 @@ for nr in [59, 60]:
                                                 5*8000, 
                                                 centerratio = 0.5,
                                                 getsplitpoints=True)
+    indicies.append(InterestIdx)
+
+for i, nr in enumerate([54, 55]):
     #slices = [60, 1850]
     slices = [i for i in range(60, 1850, 50)]
     #zipinter = [(30,45), (1045,1060)]       
@@ -40,13 +44,14 @@ for nr in [59, 60]:
             slices.remove(col)
 
     cw = 11      # Convolution Width
+    InterestIdx = indicies[i]
     for slugnr, pair in enumerate(InterestIdx):
         print(f"Run {nr}\tSlug: {slugnr+1}/{len(InterestIdx)}")
         startind, endind = pair
 
         start_t = startind/8000
         end_t = endind/8000
-
+        """
         cap = verticalsnapshots(mp4path, mp4, start_t, end_t, slices)
 
         # Treatment
@@ -123,22 +128,22 @@ for nr in [59, 60]:
         plt.savefig(f"{nr}stats/regression/slug{slugnr+1}.png")
         plt.close()
         #plt.show()
+        """
         # Write file
-        #data_segment = np.array([m1[startind:endind+1],
-                                 #m2[startind:endind+1],
-                                 #m2[startind:endind+1]])
-        filename = f"s{slugnr+1}_r{nr}.txt"
-        saveloc = "/run/media/daniel/ATLEJ-STT/plugslug"
-        #out = os.path.join(saveloc, filename)
-        #np.savetxt(out, data_segment)
+        data_segment = np.array([m1[startind:endind+1],
+                                 m2[startind:endind+1],
+                                 m3[startind:endind+1]])
+        filename = f"n{slugnr+1}_r{nr}.txt"
+        out = os.path.join(saveloc, filename)
+        np.savetxt(out, data_segment)
         # create dict
         d = {
                 "run":          nr,
                 "filename":     filename,
                 "slugnr":       slugnr+1,
-                "label":        1,
-                "velocity":     v,
-                "length":       v*s,
+                "label":        0,
+                "velocity":     None,
+                "length":       None,
                 "startind":     startind,
                 "endind":       endind,
                 "starttime":    start_t,
@@ -147,4 +152,8 @@ for nr in [59, 60]:
         allslugs.append(d)
 
 df = pd.DataFrame(allslugs)
-df.to_csv("/run/media/daniel/ATLEJ-STT/plugslug/plugmeta.csv", index=False)
+csvname = "plugmeta.csv"
+if not os.path.exists(os.path.join(saveloc, csvname)):
+    df.to_csv(os.path.join(saveloc, csvname), mode='a', index=False, header=True)
+else:
+    df.to_csv(os.path.join(saveloc, csvname), mode='a', index=False, header=False)
