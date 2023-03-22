@@ -7,109 +7,176 @@ from scipy.signal import find_peaks
 from utils import *
 
 nr = 49
+threshold = 220     # 0 - 255
 datapath = "/run/media/daniel/ATLEJ-STT/data"
-fil = f"micData_{nr}.lvm"
 mp4path = "/run/media/daniel/ATLEJ-STT/mp4"
-mp4 = f"run{nr}.mp4"
+for nr in [49, 51, 53, 59, 60]:
+    fil = f"micData_{nr}.lvm"
+    mp4 = f"run{nr}.mp4"
 
-df = extract_lvm(datapath, fil)
+    df = extract_lvm(datapath, fil)
+    data = df["mic2"].to_numpy()
 
-data = df["mic2"].to_numpy()
+    segments, coupledidx = splitslugs(data, 
+                                      3*np.std(data), # Threshold for interest
+                                      5*8000,
+                                      getsplitpoints=True)
+    t = df["time"].to_numpy()
 
-#data = np.loadtxt("data10min.txt")
-#t = np.loadtxt("time10min.txt")
-#data = data[:8000*60*3]
-#t = t[:8000*60*3]
+    kl = 5
+    runavg = np.ones(kl)/kl
+    #if not os.path.exists(f"{nr}stats"):
+        #os.makedirs(f"{nr}stats")
 
-segments, coupledidx = splitslugs(data, 
-                                  3*np.std(data), # Threshold for interest
-                                  5*8000,
-                                  getsplitpoints=True)
+    slices = [i for i in range(60, 1850, 50)]
+    # Remove potential zip measurements
+    for col in slices:
+        if 30 <= col <= 45:
+            slices.remove(col)
+        if 1045 <= col <= 1060:
+            slices.remove(col)
 
-t = df["time"].to_numpy()
+    slugstats = []
+    measure = {"max":np.max,
+               "min":np.min,
+               "mean":np.mean,
+               "var":np.var
+            }
 
-kl = 5
-runavg = np.ones(kl)/kl
-#if not os.path.exists(f"{nr}stats"):
-    #os.makedirs(f"{nr}stats")
+    print(f"Number of slugs: {len(coupledidx)}")
+    for slugnr, pair in enumerate(coupledidx):
+        print(f"Treating slug {slugnr+1}/{len(coupledidx)}")
+        startind, stopind = pair
+        start_t = startind/8000
+        stop_t = stopind/8000
+        print(f"mp4 time: {int(start_t//60)}:{start_t%60:2.0f} - {int(stop_t//60)}:{stop_t%60:2.0f}")
 
-slugstats = []
-slices = [i for i in range(60, 1850, 90)]
-slices.remove(1050)     # zip tie pixel
-#slices = [60, 1850]
-#slices = [60]
-print(f"Number of slugs: {len(coupledidx)}")
-for slugnr, pair in enumerate(coupledidx):
-    print(f"Treating slug {slugnr+1}/{len(coupledidx)}")
-    startind, stopind = pair
-    start_t = startind/8000
-    stop_t = stopind/8000
-    print(f"mp4 time: {start_t//60}:{start_t%60} - {stop_t//60}:{stop_t%60}")
+        cap = verticalsnapshots(mp4path, mp4, start_t, stop_t, slices)
+        box = boxintens(mp4path, mp4, start_t, stop_t)
+        box[np.where(box < threshold)]=0
+        meanbox = box.mean(axis=(1, 2))
+        #frame = np.arange(1, len(meanbox)+1)
+        #plt.plot(frame, meanbox)
+        #plt.show()
+        #continue
 
-    cap = verticalsnapshots(mp4path, mp4, start_t, stop_t, slices)
+        normcap = []
+        for arr in cap:
+            #print(arr.shape)
+            tmp = arr - arr.mean(axis=1, keepdims=True)
+            tmp[np.where(tmp < threshold)] = 0
+            normcap.append(tmp)
 
-    normcap = []
+        normintcap = []     # norm intensity
+        for arr in normcap:
+            normintcap.append(arr.mean(axis=0))
 
-    for arr in cap:
-        #print(arr.shape)
-        normcap.append(arr - arr.mean(axis=1, keepdims=True))
+        fullcap = np.array(normintcap)  # All intensity plots for one slug, x slices
+        #Ftrans = np.fft.fft(fullcap).mean(axis=0)
+        #print(Ftrans)
+        #Ffreq = np.fft.fftfreq(Ftrans.size)
+        #print(Ffreq)
+        #print(Ftrans.shape)
+        #print(Ffreq.shape)
+        #inds = np.where(Ffreq > 0)
 
-    normintcap = []
-    for arr in normcap:
-        normintcap.append(arr.mean(axis=0))
+        #plt.title(f"Slug: {slugnr+1}")
+        #plt.plot(Ffreq[inds], np.abs(Ftrans)[inds])
+        #plt.show()
+        #continue
+        #exit(1)
+        '''
+        fig, ax = plt.subplots(2, 2, figsize=(12,8))
+        fig.suptitle(f"Slug nr. {slugnr+1}")
+        ax[0, 0].imshow(normcap[0])
+        ax[0, 1].imshow(normcap[-1])
+        x = np.arange(len(fullcap[0]))
+        ax[1, 0].plot(x, fullcap[0])
+        ax[1, 0].axhline(np.std(fullcap[0]), ls='--', c='k', alpha=0.4)
+        ax[1, 0].axhline(2*np.std(fullcap[0]), ls='--', c='k', alpha=0.4)
+        x = np.arange(len(fullcap[-1]))
+        ax[1, 1].plot(x, fullcap[-1])
+        ax[1, 1].axhline(np.std(fullcap[1]), ls='--', c='k', alpha=0.4)
+        ax[1, 1].axhline(2*np.std(fullcap[1]), ls='--', c='k', alpha=0.4)
 
-    first = normcap[0]
-    final = normcap[-1]
+        plt.show()
+        '''
+        # Get max, maxind, and variance from each of the slices
+        Max = np.max(fullcap, axis=1)
+        Maxind = np.argmax(fullcap, axis=1)
+        Var = np.var(fullcap, axis=1)
 
-    fullcap = np.array(normintcap)
+        slicevals = {"max":Max, "maxind":Maxind, "var":Var}
 
-    # For storing into csv file
-    for i, arr in enumerate(fullcap):
-        #print(f"[{i+1}/{len(slices)}]")
-        lowinds = np.where(arr < -np.std(arr))[0]
-        highinds = np.where(arr > np.std(arr))[0]
-        conv = np.convolve(arr, runavg, mode="same")
-        convlowinds = np.where(conv < -np.std(conv))[0]
-        convhighinds = np.where(conv > np.std(conv))[0]
         d = {
-            "run":              nr,
-            "slugnr":           slugnr+1,
-            "startind":         startind,
-            "endind":           stopind,
-            "length":           int(stopind - startind),
-            "starttime":        start_t,
-            "endtime":          stop_t,
-            "timelen":          stop_t - start_t,
-            "measurepixel":     slices[i],
-            "avg":              np.mean(arr),
-            "var":              np.var(arr),
-            "std":              np.std(arr),
-            "min":              np.min(arr),
-            "max":              np.max(arr),
-            "minidx":           np.argmin(arr),
-            "maxidx":           np.argmax(arr),
-            "lowinds":          len(lowinds),
-            "highinds":         len(highinds),
-            "minidxtime":       np.argmin(arr)/8000,
-            "maxidxtime":       np.argmax(arr)/8000,
-            "convavg":          np.mean(conv),
-            "convvar":          np.var(conv),
-            "convstd":          np.std(conv),
-            "convmin":          np.min(conv),
-            "convmax":          np.max(conv),
-            "convminidx":       np.argmin(conv),
-            "convmaxidx":       np.argmax(conv),
-            "convminidxtime":   np.argmin(conv)/8000,
-            "convmaxidxtime":   np.argmax(conv)/8000,
-            "convlowinds":      len(convlowinds),
-            "convhighinds":     len(convlowinds)
-            } 
+                "run": nr,
+                "slugnr":slugnr+1,
+                "startind": startind,
+                "endind": stopind,
+                "starttime": start_t,
+                "endtime": stop_t,
+                "max_boxintens": np.max(meanbox)
+             }
+
+        for vals in slicevals.keys():
+            for stat in measure.keys():
+                d[f"{stat}_{vals}"] = measure[stat](slicevals[vals])
 
         slugstats.append(d)
+        # For storing into csv file
+        """
+        for i, arr in enumerate(fullcap):
+            #print(f"[{i+1}/{len(slices)}]")
+            #lowinds = np.where(arr < -np.std(arr))[0]
+            #highinds = np.where(arr > np.std(arr))[0]
+            #conv = np.convolve(arr, runavg, mode="same")
+            #convlowinds = np.where(conv < -np.std(conv))[0]
+            #convhighinds = np.where(conv > np.std(conv))[0]
+            '''
+            d = {
+                "run":              nr,
+                "slugnr":           slugnr+1,
+                "startind":         startind,
+                "endind":           stopind,
+                "length":           int(stopind - startind),
+                "starttime":        start_t,
+                "endtime":          stop_t,
+                "timelen":          stop_t - start_t,
+                "measurepixel":     slices[i],
+                "avg":              np.mean(arr),
+                "var":              np.var(arr),
+                "std":              np.std(arr),
+                "min":              np.min(arr),
+                "max":              np.max(arr),
+                "minidx":           np.argmin(arr),
+                "maxidx":           np.argmax(arr),
+                "lowinds":          len(lowinds),
+                "highinds":         len(highinds),
+                "minidxtime":       np.argmin(arr)/8000,
+                "maxidxtime":       np.argmax(arr)/8000,
+                "convavg":          np.mean(conv),
+                "convvar":          np.var(conv),
+                "convstd":          np.std(conv),
+                "convmin":          np.min(conv),
+                "convmax":          np.max(conv),
+                "convminidx":       np.argmin(conv),
+                "convmaxidx":       np.argmax(conv),
+                "convminidxtime":   np.argmin(conv)/8000,
+                "convmaxidxtime":   np.argmax(conv)/8000,
+                "convlowinds":      len(convlowinds),
+                "convhighinds":     len(convlowinds)
+                } 
 
-# unindent in order to use
-df = pd.DataFrame(slugstats)
-df.to_csv(f"run{nr}stats.csv")
+            slugstats.append(d)
+            '''
+        """
+
+    # unindent in order to use
+    df = pd.DataFrame(slugstats)
+    if not os.path.exists("boxint.csv"):
+        df.to_csv(f"boxint.csv", mode='a', index=False, header=True)
+    else:
+        df.to_csv(f"boxint.csv", mode='a', index=False, header=False)
 #continue
 print("CSV file written")
 exit(1)

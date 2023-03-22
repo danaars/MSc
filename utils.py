@@ -198,3 +198,36 @@ def verticalsnapshots(pth, mp4file, start_s, stop_s, measureinds):
 
     cap.release()
     return arr
+
+def boxintens(pth, mp4file, start_s, stop_s):
+    start_ms = int(start_s*1000)
+    stop_ms = int(stop_s*1000)
+
+    filename = os.path.join(pth, mp4file)
+    cap = cv2.VideoCapture(filename)
+
+    h = int(87-67)
+    w = int(1035-1023)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    s = stop_s - start_s
+
+
+    arr = np.zeros((int(np.ceil(fps*s)+2), h, w))
+
+    cap.set(cv2.CAP_PROP_POS_MSEC, int(start_ms - 10))
+
+    ret = True
+    while ret and cap.get(cv2.CAP_PROP_POS_MSEC) < start_ms:
+        ret, BGRimg = cap.read()
+
+    frame = 0
+    while ret and cap.get(cv2.CAP_PROP_POS_MSEC) <= stop_ms:
+        ret, BGRimg = cap.read()
+        gray = cv2.cvtColor(BGRimg, cv2.COLOR_BGR2GRAY)
+        box = gray[67:87, 1023:1035]
+        
+        arr[frame] = box
+        frame += 1
+
+    cap.release()
+    return arr

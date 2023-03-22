@@ -12,6 +12,17 @@ saveloc = "/run/media/daniel/ATLEJ-STT/plugslug"
 def consec(arr, step):
     return np.split(arr, np.where(np.diff(arr) > step)[0] + 1)
 
+def autolabel(nr, boxintensity):
+    if nr in [59, 60]:
+        return 3    # Slug
+    elif nr in [49, 51, 53]:
+        if boxintensity > 100:
+            return 1    # Aerated
+        else:
+            return 2    # Breaking wave
+    else:
+        return 0    # Noise
+
 allslugs = []
 indicies = []
 for nr in [59, 60]:
@@ -32,6 +43,7 @@ for nr in [59, 60]:
                                                 getsplitpoints=True)
     indicies.append(InterestIdx)
 
+threshold = 220
 for i, nr in enumerate([54, 55]):
     #slices = [60, 1850]
     slices = [i for i in range(60, 1850, 50)]
@@ -43,6 +55,13 @@ for i, nr in enumerate([54, 55]):
         if 1045 <= col <= 1060:
             slices.remove(col)
 
+    fil = f"micData_{nr}.lvm"
+    df = extract_lvm(datapath, fil)
+    m1 = df["mic1"].to_numpy()
+    m2 = df["mic2"].to_numpy()
+    m3 = df["mic3"].to_numpy()
+    time = df["time"].to_numpy()
+
     cw = 11      # Convolution Width
     InterestIdx = indicies[i]
     for slugnr, pair in enumerate(InterestIdx):
@@ -51,8 +70,13 @@ for i, nr in enumerate([54, 55]):
 
         start_t = startind/8000
         end_t = endind/8000
-        """
+
         cap = verticalsnapshots(mp4path, mp4, start_t, end_t, slices)
+        box = boxintens(mp4path, mp4, start_t, end_t)
+        box[np.where(box < threshold)] = 0
+        meanbox = box.mean(axis=(1, 2))
+
+        label = autolabel(nr, meanbox)
 
         # Treatment
         scaled = []
@@ -128,7 +152,7 @@ for i, nr in enumerate([54, 55]):
         plt.savefig(f"{nr}stats/regression/slug{slugnr+1}.png")
         plt.close()
         #plt.show()
-        """
+
         # Write file
         data_segment = np.array([m1[startind:endind+1],
                                  m2[startind:endind+1],
@@ -141,7 +165,7 @@ for i, nr in enumerate([54, 55]):
                 "run":          nr,
                 "filename":     filename,
                 "slugnr":       slugnr+1,
-                "label":        0,
+                "label":        label,
                 "velocity":     None,
                 "length":       None,
                 "startind":     startind,

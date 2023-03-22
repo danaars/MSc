@@ -1,10 +1,14 @@
+import os
 import time
 import json
+import datetime
 import torch
 import torchmetrics
 
 from plugCNN import PlugSet, PlugRegClass
 
+date = datetime.date.today().strftime("%d%m")
+print("Date for training: ", date)
 print(f"PyTorch: {torch.__version__}")
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
@@ -68,10 +72,12 @@ running_loss = {"ClassificationCEL":[], "VelocityMSE":[], "LengthMSE":[]}
 
 # Define metrics
 train_acc = torchmetrics.MetricCollection([
-    torchmetrics.Accuracy(task="binary")])
+    torchmetrics.Accuracy(task="binary"),
+    torchmetrics.ConfusionMatrix(task="binary")])
 
 test_acc = torchmetrics.MetricCollection([
-    torchmetrics.Accuracy(task="binary")])
+    torchmetrics.Accuracy(task="binary"),
+    torchmetrics.ConfusionMatrix(task="binary")])
 
 train_vel_reg = torchmetrics.MetricCollection([
     torchmetrics.MeanSquaredError(),
@@ -134,6 +140,8 @@ for e in range(epochs):
                 running_loss[key] = []
             print("")
 
+        break
+
     t1 = time.time()
     print(f"Time for epoch: {t1-t0} seconds")
 
@@ -142,12 +150,12 @@ for e in range(epochs):
     
     metrics = {}
     # Get metrics for epoch and save model
-    predicted_labels = []
-    predicted_velocities = []
-    predicted_lengths = []
-    target_labels = []
-    target_velocities = []
-    target_lengths = []
+    #predicted_labels = []
+    #predicted_velocities = []
+    #predicted_lengths = []
+    #target_labels = []
+    #target_velocities = []
+    #target_lengths = []
     counter = 0
     for i, data in enumerate(trainloader):
         with torch.no_grad():
@@ -162,12 +170,13 @@ for e in range(epochs):
             pred_label, pred_vel, pred_len = prediction
             pred_idx = torch.argmax(torch.softmax(pred_label,dim=1),dim=1)
 
-            predicted_labels += pred_idx.flatten().tolist()
-            predicted_velocities += pred_vel.flatten().tolist()
-            predicted_lengths += pred_len.flatten().tolist()
-            target_labels += label_idx.flatten().tolist()
-            target_velocities += velocity.flatten().tolist()
-            target_lengths += length.flatten().tolist()
+            #predicted_labels += pred_idx.flatten().tolist()
+            #predicted_velocities += pred_vel.flatten().tolist()
+            #predicted_lengths += pred_len.flatten().tolist()
+            #target_labels += label_idx.flatten().tolist()
+            #target_velocities += velocity.flatten().tolist()
+            #target_lengths += length.flatten().tolist()
+
             #print(f"Predicted label: {pred_label}")
             #print(f"Predicted velocity: {pred_velocity}")
             #print(f"Predicted length: {pred_length}")
@@ -188,18 +197,21 @@ for e in range(epochs):
     len_dict = {}
     for key in computed_acc.keys():
         print(key)
-        print(computed_acc[key])
-        acc_dict[key] = computed_acc[key].item()
+        try:
+            acc_dict[key] = computed_acc[key].item()
+        except ValueError as err:
+            acc_dict[key] = computed_acc[key].tolist()
+        print(acc_dict[key])
     for key in computed_vel.keys():
         vel_dict[key] = computed_vel[key].item()
         len_dict[key] = computed_len[key].item()
 
-    metrics["train"] = {"pred_label":predicted_labels,
-                        "target_label":target_labels,
-                        "pred_vel":predicted_velocities,
-                        "target_vel":target_velocities,
-                        "pred_len":predicted_lengths,
-                        "target_len":target_lengths,
+    metrics["train"] = {#"pred_label":predicted_labels,
+                        #"target_label":target_labels,
+                        #"pred_vel":predicted_velocities,
+                        #"target_vel":target_velocities,
+                        #"pred_len":predicted_lengths,
+                        #"target_len":target_lengths,
                         "acc":acc_dict,
                         "vel_reg":vel_dict,
                         "len_reg":len_dict
@@ -208,19 +220,19 @@ for e in range(epochs):
     print(f"Train Acc: {computed_acc}")
     print(f"Train Velocity: {computed_vel}")
     print(f"Train Length: {computed_len}")
-    print(metrics["train"])
+    #print(metrics["train"])
 
     # Reset metric
     train_acc.reset()
     train_vel_reg.reset()
     train_len_reg.reset()
 
-    predicted_labels = []
-    predicted_velocities = []
-    predicted_lengths = []
-    target_labels = []
-    target_velocities = []
-    target_lengths = []
+    #predicted_labels = []
+    #predicted_velocities = []
+    #predicted_lengths = []
+    #target_labels = []
+    #target_velocities = []
+    #target_lengths = []
     counter = 0
     for i, data in enumerate(testloader):
         with torch.no_grad():
@@ -235,12 +247,12 @@ for e in range(epochs):
             pred_label, pred_vel, pred_len = prediction
             pred_idx = torch.argmax(torch.softmax(pred_label,dim=1),dim=1)
 
-            predicted_labels += pred_idx.flatten().tolist()
-            predicted_velocities += pred_vel.flatten().tolist()
-            predicted_lengths += pred_len.flatten().tolist()
-            target_labels += label_idx.flatten().tolist()
-            target_velocities += velocity.flatten().tolist()
-            target_lengths += length.flatten().tolist()
+            #predicted_labels += pred_idx.flatten().tolist()
+            #predicted_velocities += pred_vel.flatten().tolist()
+            #predicted_lengths += pred_len.flatten().tolist()
+            #target_labels += label_idx.flatten().tolist()
+            #target_velocities += velocity.flatten().tolist()
+            #target_lengths += length.flatten().tolist()
             
             test_acc.update(pred_idx, label_idx)
             if (not torch.isnan(velocity).all()) and (not torch.isnan(length).all()):
@@ -254,19 +266,20 @@ for e in range(epochs):
     vel_dict = {}
     len_dict = {}
     for key in computed_acc.keys():
-        #print(key)
-        #print(computed_acc[key])
-        acc_dict[key] = computed_acc[key].item()
+        try:
+            acc_dict[key] = computed_acc[key].item()
+        except ValueError as err:
+            acc_dict[key] = computed_acc[key].tolist()
     for key in computed_vel.keys():
         vel_dict[key] = computed_vel[key].item()
         len_dict[key] = computed_len[key].item()
 
-    metrics["train"] = {"pred_label":predicted_labels,
-                        "target_label":target_labels,
-                        "pred_vel":predicted_velocities,
-                        "target_vel":target_velocities,
-                        "pred_len":predicted_lengths,
-                        "target_len":target_lengths,
+    metrics["test"] = {#"pred_label":predicted_labels,
+                        #"target_label":target_labels,
+                        #"pred_vel":predicted_velocities,
+                        #"target_vel":target_velocities,
+                        #"pred_len":predicted_lengths,
+                        #"target_len":target_lengths,
                         "acc":acc_dict,
                         "vel_reg":vel_dict,
                         "len_reg":len_dict
@@ -285,3 +298,11 @@ for e in range(epochs):
 
     with open("epoch_metrics.json", "w", encoding='utf-8') as outfile:
         json.dump(epoch_metrics, outfile, indent=2)
+
+    # Save state dict
+    modelpath = os.path.join("plugmodels", date)
+    if not os.path.exists(modelpath):
+        os.makedirs(modelpath)
+
+    statename = os.path.join(modelpath, f"epoch{e+1}.pth")
+    torch.save(model.state_dict(), statename)
