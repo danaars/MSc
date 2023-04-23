@@ -6,7 +6,7 @@ import numpy as np
 def pad(tens, maxshape):
     # Note: 2D only
     channels, height, width = tens.shape
-    maxheight, maxwidth = maxshape
+    channels, maxheight, maxwidth = maxshape
 
     w_diff = maxwidth - width
     h_diff = maxheight - height
@@ -60,10 +60,13 @@ class PipeSound(torch.utils.data.Dataset):
         return tens, label_idx, velocity, length
 
     def getsample(self,
-                  inchannels,
+                  #inchannels,
                   device):
-        return torch.rand( (inchannels, *self.maxshape), device = device)
+        #return torch.rand( (inchannels, *self.maxshape), device = device)
+        return torch.rand(*self.maxshape, device = device)
 
-    def set_transform(self, custom_transform):
+    def set_transform(self,
+                      inchannels,
+                      custom_transform):
         self.transform = custom_transform
-        self.maxshape = self.transform(np.ones(self.maxlen)).shape
+        self.maxshape = self.transform(np.ones((inchannels, self.maxlen))).shape
